@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 from collections import Sequence
 from enum import Enum
 from typing import Optional, Union
-# from ctypes import c_int, c_void_p
 import ctypes as _ctypes
 import array
 import math
@@ -1179,8 +1178,8 @@ class SteimDecoder(Decoder, ABC):
                 if control == 0:
                     continue
                 value = frame[bucket_index]
-                deltas = SteimBucket.unpack_by_control(encoding_format=record.encoding_format, control=control,
-                                                       value=value)
+                #deltas = SteimBucket.unpack_by_control(encoding_format=record.encoding_format, control=control, value=value)
+                deltas = unpack(control=control, value=value)
                 if len(deltas) == 0:
                     raise SteimError('fill: {}, {} {}', control, value, deltas)
                 for delta in deltas:
@@ -1412,53 +1411,54 @@ def unpack_steim_2_no(value: int, mask: int, max_value: int, shift_from: int, wi
 lib = pathlib.Path().absolute() / "steim.so"
 steim = ctypes.CDLL('/Users/yazan/Documents/Github/python/seedPy/steim.so')
 
+c_unpack = steim.unpack
+c_unpack.restype = _ctypes.c_void_p
+c_unpack.argtypes = [
+    _ctypes.c_int,
+    _ctypes.c_int,
+    ndpointer(dtype=numpy.int32)]
+
 c_unpack_1 = steim.unpack_1
 c_unpack_1.restype = _ctypes.c_void_p
 c_unpack_1.argtypes = [
     _ctypes.c_int,
-    numpy.ctypeslib.ndpointer(dtype=numpy.int32)]
-# c_unpack_1.restype = ndpointer(dtype=ctypes.c_int, shape=(1,))
+    ndpointer(dtype=numpy.int32)]
 
 c_unpack_2 = steim.unpack_2
 c_unpack_2.restype = _ctypes.c_void_p
 c_unpack_2.argtypes = [
     _ctypes.c_int,
-    numpy.ctypeslib.ndpointer(dtype=numpy.int32)]
-# c_unpack_2.restype = ndpointer(dtype=ctypes.c_int, shape=(2,))
+    ndpointer(dtype=numpy.int32)]
 
 c_unpack_3 = steim.unpack_3
 c_unpack_3.restype = _ctypes.c_void_p
 c_unpack_3.argtypes = [
     _ctypes.c_int,
-    numpy.ctypeslib.ndpointer(dtype=numpy.int32)]
-# c_unpack_3.restype = ndpointer(dtype=ctypes.c_int, shape=(3,))
+    ndpointer(dtype=numpy.int32)]
+
 c_unpack_4 = steim.unpack_4
 c_unpack_4.restype = _ctypes.c_void_p
 c_unpack_4.argtypes = [
     _ctypes.c_int,
-    numpy.ctypeslib.ndpointer(dtype=numpy.int32)]
-# c_unpack_4.restype = ndpointer(dtype=ctypes.c_int, shape=(4,))
+    ndpointer(dtype=numpy.int32)]
 
 c_unpack_5 = steim.unpack_5
 c_unpack_5.restype = _ctypes.c_void_p
 c_unpack_5.argtypes = [
     _ctypes.c_int,
-    numpy.ctypeslib.ndpointer(dtype=numpy.int32)]
-# c_unpack_5.restype = ndpointer(dtype=ctypes.c_int, shape=(5,))
+    ndpointer(dtype=numpy.int32)]
 
 c_unpack_6 = steim.unpack_6
 c_unpack_6.restype = _ctypes.c_void_p
 c_unpack_6.argtypes = [
     _ctypes.c_int,
-    numpy.ctypeslib.ndpointer(dtype=numpy.int32)]
-# c_unpack_6.restype = ndpointer(dtype=ctypes.c_int, shape=(6,))
+    ndpointer(dtype=numpy.int32)]
 
 c_unpack_7 = steim.unpack_7
 c_unpack_7.restype = _ctypes.c_void_p
 c_unpack_7.argtypes = [
     _ctypes.c_int,
-    numpy.ctypeslib.ndpointer(dtype=numpy.int32)]
-# c_unpack_7.restype = ndpointer(dtype=ctypes.c_int, shape=(7,))
+    ndpointer(dtype=numpy.int32)]
 
 c_get_control = steim.get_control
 c_get_control.restype = ctypes.c_int
@@ -1466,6 +1466,12 @@ c_get_control.restype = ctypes.c_int
 
 def get_control(value: int):
     return c_get_control(ctypes.c_int(value))
+
+
+def unpack(control: int, value: int):
+    res = numpy.zeros(7, dtype=numpy.int32)
+    c_unpack(numpy.int(control), numpy.int(value), res)
+    return res
 
 
 def unpack_1(value: int):
