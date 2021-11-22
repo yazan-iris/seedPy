@@ -5,8 +5,7 @@ from enum import Enum
 from typing import Union, Sequence, overload, List
 
 import array
-import numpy
-from math import floor
+import math
 
 st_big_signed = struct.Struct(">di")
 
@@ -44,7 +43,6 @@ class ByteBuffer(Sequence):
             if type(values) == bytearray:
                 self._buffer = values
             elif type(values) == bytes:
-                self._buffer = bytearray(values)
                 self._buffer = bytearray(values)
             elif type(values) == list:
                 self._buffer = bytearray()
@@ -388,71 +386,83 @@ class IntBuffer(Sequence):
         if byte_order is None:
             raise ValueError
         instance = cls(capacity=length, byte_order=byte_order)
-
-        for i in range(0, length, 4):
-            num: [] = values[i:i + 4]
-            instance.put(
-                int.from_bytes(num, byteorder='big' if byte_order == ByteOrder.BIG_ENDIAN else 'little'))
+        fmt = 'i' + '>' if byte_order == ByteOrder.BIG_ENDIAN else '<'
+        instance._buffer = struct.unpack_from('<i', values)
+        # array.array('i', [0]) * capacity
         return instance
 
 
 class IntArray(Sequence):
-    def __init__(self, int_array, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN):
-        super(IntArray, self).__init__()
-        if int_array is None:
+    def __init__(self, arr, rows: int, columns: int):
+        if arr is None:
             raise ValueError
-        self._int_array: numpy.ndarray = int_array
-        self._index: int = 0
+        self._data = arr
+        self._rows = rows
+        self._columns = columns
 
-    @property
-    def array(self):
-        return self._int_array
+    def __getitem__(self, item):
+        start: int = item * self._columns
+        end: int = start + self._columns
+        return self._data[start: end]
+
+    def __setitem__(self, key, value):
+        pass
+
+    def __len__(self):
+        return math.ceil(self._data / self._columns)
+
+    def __str__(self):
+        return ", ".join(str(x) for x in self)
+
+    def reshape(self, rows: int, columns: int):
+        self._rows = rows
+        self._columns = columns
 
     @property
     def shape(self) -> (int, int):
-        return self._int_array.shape
-
-    def __getitem__(self, item):
-        return self._int_array[item]
-
-    def __setitem__(self, key, value):
-        if value is None:
-            raise ValueError
-        if isinstance(value, int):
-            self._int_array[key] = numpy.int32(value)
-        elif isinstance(value, numpy.int32):
-            self._int_array[key] = value
-        else:
-            raise ValueError(f'type: {type(value)}, value: {value}')
-
-    def __len__(self):
-        return len(self._int_array)
-
-    def append(self, value):
-        self._int_array[self._index] = value
-        self._index += 1
-
-    def reshape(self, rows: int, columns: int):
-        self._int_array = self._int_array.reshape(rows, columns)
-
-    def to_bytes(self, order=None):
-        if order:
-            return self._int_array.tobytes(order=order)
-        else:
-            return self._int_array.tobytes()
+        return self._rows, self._columns
 
     @classmethod
-    def wrap_bytes(cls, values: (bytes, bytearray),
-                   byte_order: ByteOrder = ByteOrder.BIG_ENDIAN) -> 'IntArray':
-        if values is None or len(values) == 0:
-            raise ValueError
-        int_array = numpy.frombuffer(values, dtype='>i' if byte_order == ByteOrder.BIG_ENDIAN else '<i')
-        return cls(int_array, byte_order=byte_order)
+    def empty(cls, rows: int, columns: int):
+        return cls([([None] * columns) * rows])
 
     @classmethod
-    def allocate(cls, rows: int, columns: int,
-                 byte_order: ByteOrder = ByteOrder.BIG_ENDIAN) -> 'IntArray':
-        return cls(numpy.zeros((rows, columns), dtype='>i' if byte_order == ByteOrder.BIG_ENDIAN else '<i'),
-                   byte_order=byte_order)
+    def zeros(cls, rows: int, columns: int):
+        return cls([([0] * columns) * rows])
 
+    @classmethod
+    def allocate(cls, rows: int, columns: int):
+        if rows < 1:
+            raise ValueError
+        if columns < 1:
+            raise ValueError
+        arr = array.array('l', (0 for i in range(0, columns)))
+        return cls(arr)
+
+    @classmethod
+    def wrap_ints(cls, values, byte_order: ByteOrder, rows: int = 1, columns: int = None):
+        if values is None:
+            raise ValueError
+        if not rows or rows < 1:
+            raise ValueError
+        if not columns or columns < 1:
+            raise ValueError
+        quotient, remainder = divmod(len(values), 4)
+        return cls(values, rows, columns)
+
+    @classmethod
+    def wrap_bytes(cls, values: bytes, byte_order: ByteOrder, rows: int = 1, columns: int = None):
+        if values is None:
+            raise ValueError
+        if not rows or rows < 1:
+            raise ValueError
+        if not columns or columns < 1:
+            raise ValueError
+        quotient, remainder = divmod(len(values), 4)
+        if remainder > 0:
+            raise ValueError
+        fmt = '{}{}i'.format('>' if byte_order == ByteOrder.BIG_ENDIAN else '<', quotient)
+        #print('{}  remainder: {}   {}   {}'.format(quotient, remainder, fmt, len(values)))
+        #print(values)
+        return cls(struct.unpack(fmt, values), rows, columns)
 

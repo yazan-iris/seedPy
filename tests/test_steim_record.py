@@ -2,7 +2,6 @@ import unittest
 
 import array
 import math
-import numpy
 
 from codec import SteimRecord, Steim1Bucket, EncodingFormat, SteimBucket, ControlSequence, Steim2Bucket
 from buffer import ByteOrder

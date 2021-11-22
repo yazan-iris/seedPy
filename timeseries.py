@@ -16,8 +16,8 @@ from units import ureg
 
 class Epoch:
     def __init__(self, start_time: datetime, end_time: datetime):
-        self._start_time = start_time
-        self._end_time = end_time
+        self._start_time: datetime = start_time
+        self._end_time: datetime = end_time
 
     @property
     def start_time(self):
@@ -83,7 +83,6 @@ class Segment(Epoch):
         super(Segment, self).__init__(start_time=start_time, end_time=end_time)
         self._sample_rate: int = sample_rate
         self._samples = samples
-        ll = list()
 
     @property
     def sample_rate(self) -> int:
@@ -103,16 +102,19 @@ class Segment(Epoch):
                 new_list = self.samples[0:index]
                 new_list += other.samples
                 self._samples = new_list
+                #self._end_time = other.end_time
             else:
                 duration = self.start_time - other.start_time
                 index: int = duration * self.sample_rate
                 new_list = other.samples[0:index]
                 new_list += self.samples[len(other.samples) - index:len(self)]
                 self._samples = new_list
+                #self._start_time = other.start_time
         elif self <= other:
             self._samples += other.samples
             self._end_time = other.end_time
         else:
+            #self._samples = other.samples.extend(self._samples)
             self._samples = other.samples + self._samples
             self._start_time = other.start_time
 
@@ -211,8 +213,8 @@ class Trace:
         # {'date': np.array([datetime.datetime(2020, 1, i + 1) for i in range(12)]
         time: datetime.datetime = self.start_time
         time_list = []
-        #arr = array.array(self.number_of_samples)
-        #a = array.array('I', (0 for i in range(0, self.number_of_samples)))
+        # arr = array.array(self.number_of_samples)
+        # a = array.array('I', (0 for i in range(0, self.number_of_samples)))
         for segment in self._segments:
             delta: float = 1 / segment.sample_rate
             time_delta = datetime.timedelta(seconds=delta)
@@ -228,7 +230,7 @@ class Trace:
         index: int = 0
         for segment in self._segments:
             samples.extend(segment.samples)
-            #arr[index:index+len(segment)] = segment[0:len(segment)]
+            # arr[index:index+len(segment)] = segment[0:len(segment)]
             index += len(segment)
         return samples
 

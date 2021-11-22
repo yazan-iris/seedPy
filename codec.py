@@ -3,14 +3,12 @@ import pathlib
 from abc import ABC, abstractmethod
 from collections import Sequence
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional
 import ctypes as _ctypes
 import array
 import math
-import numpy
-from numpy.ctypeslib import ndpointer
 
-from buffer import ByteOrder, ByteBuffer, IntArray
+from buffer import ByteOrder, IntArray
 
 
 class CodecError(SyntaxError):
@@ -72,9 +70,9 @@ class ControlSequence(Sequence):
             if isinstance(value, int):
                 ControlSequence.validate(value)
                 self._value = value
-            elif isinstance(value, numpy.int32):
-                self._value = value.item()
-                ControlSequence.validate(self._value)
+            # elif isinstance(value, numpy.int32):
+            # self._value = value.item()
+            # ControlSequence.validate(self._value)
             elif isinstance(value, Sequence):
                 if len(value) > 16:
                     raise ValueError
@@ -144,8 +142,8 @@ class ControlSequence(Sequence):
         return self._length
 
     def __int__(self):
-        if isinstance(self._value, numpy.int32):
-            return self._value.value()
+        # if isinstance(self._value, numpy.int32):
+        # return self._value.value()
         return self._value
 
     def __str__(self) -> str:
@@ -673,171 +671,6 @@ class Steim2Bucket(SteimBucket):
         return bucket
 
 
-class SteimFrame(Sequence):
-
-    def __init__(self, encoding_format: EncodingFormat = EncodingFormat.STEIM_2,
-                 byte_order: ByteOrder = ByteOrder.BIG_ENDIAN):
-        super(SteimFrame, self).__init__()
-        if EncodingFormat is None:
-            raise ValueError
-        self._encoding_format = encoding_format
-        if byte_order is None:
-            raise ValueError('byte_order is required, received None')
-        # self._buffer = ByteBuffer(capacity=(16 * 4), byte_order=byte_order)
-        # self._int_buffer = numpy.zeros(16, dtype=int)
-        # self._int_buffer = array.array('i')
-        self._capacity = 16
-        self._index = 1
-
-    @property
-    def control_sequence(self) -> ControlSequence:
-        return ControlSequence(self._buffer.get_int(index=0))
-
-    @property
-    def capacity(self) -> int:
-        return self._capacity
-
-    @property
-    def byte_order(self) -> ByteOrder:
-        return self._buffer.byte_order
-
-    @property
-    def encoding_format(self) -> EncodingFormat:
-        return self._encoding_format
-
-    def append(self, control: int, value: int):
-        if control is None:
-            raise ValueError(f'Expected a control: int but received None')
-        if value is None:
-            raise ValueError(f'Expected an value: int but received None')
-        if self._index >= self._capacity:
-            raise IndexError(self._index)
-        control_sequence: ControlSequence = self.control_sequence
-        control_sequence[self._index] = control
-        self._buffer.put_int(value=int(control_sequence), position=0)
-        if self._encoding_format == EncodingFormat.STEIM_3:
-            pass
-        else:
-            if isinstance(value, int):
-                self._buffer.put_int(value=value, position=self._index * 4)
-                self._index += 1
-            elif isinstance(value, list):
-                for val in value:
-                    self._buffer.put_int(value=val, position=self._index * 4)
-                    self._index += 1
-            else:
-                raise ValueError
-
-    def insert(self, index: int, control: int, value: int):
-        if index is None or index < 0 or index >= self._capacity:
-            raise IndexError(f'Expected an index between 0 and {self._capacity} but received {index}')
-        if control is None:
-            raise ValueError(f'Expected a control: int but received None')
-        if value is None:
-            raise ValueError(f'Expected an value: int but received None')
-        if self._index >= self._capacity:
-            raise IndexError(self._index)
-        self[index] = control, value
-
-    def remaining(self) -> int:
-        return self._capacity - self._index
-
-    def is_full(self) -> bool:
-        return self._index == self._capacity
-
-    def __len__(self) -> int:
-        return self._index
-
-    def __getitem__(self, i: int) -> (int, int):
-        if i is None:
-            raise IndexError
-        if i < 0:
-            i = i + self._index - 1
-        if i < 0:
-            raise IndexError(i)
-        return self.control_sequence[i], self._buffer.get_int(index=i * 4)
-
-    def __setitem__(self, key, value):
-        if key >= self._capacity or key >= self._index:
-            raise IndexError(f'list assignment index out of range:{key}')
-        self.control_sequence[key] = value[0]
-        self._buffer.put_int(position=key * 4, value=int(self.control_sequence))
-        self._buffer.put_int(position=key * 4, value=value[1])
-
-    def __str__(self):
-        return self.__class__.__name__ + ':' + ", ".join(str(x) for x in self)
-
-    def __eq__(self, other):
-        if other is None or len(self) != len(other):
-            return False
-        for i in range(0, 16):
-            if self[i] != other[i]:
-                return False
-        return True
-
-    def to_byte_array(self) -> bytearray:
-        return self._buffer.to_byte_array()
-
-    @classmethod
-    def wrap_ints(cls, encoding_format: EncodingFormat, values: list[int], byte_order: ByteOrder):
-        if encoding_format is None:
-            raise ValueError
-        if values is None:
-            raise ValueError
-        if byte_order is None:
-            raise ValueError
-        instance = cls(encoding_format=encoding_format, byte_order=byte_order)
-        instance._buffer = ByteBuffer.wrap_ints(values=values, byte_order=byte_order)
-        instance._index = len(values)
-        return instance
-
-    @classmethod
-    def wrap_bytes(cls, encoding_format: EncodingFormat, values: Union[bytearray, bytes], byte_order: ByteOrder):
-        if encoding_format is None:
-            raise ValueError
-        if values is None:
-            raise ValueError
-        if byte_order is None:
-            raise ValueError
-        instance = cls(encoding_format=encoding_format, byte_order=byte_order)
-        instance._buffer = ByteBuffer.wrap_bytes(values=values, byte_order=byte_order)
-        instance._index = math.floor(len(values) / 4)
-        return instance
-
-
-class SteimHeader(SteimFrame):
-    def __init__(self, encoding_format: EncodingFormat = EncodingFormat.STEIM_2,
-                 byte_order: ByteOrder = ByteOrder.BIG_ENDIAN):
-        super(SteimHeader, self).__init__(encoding_format=encoding_format, byte_order=byte_order)
-        self._index = 3
-
-    @property
-    def forward_integration_factor(self) -> int:
-        return self[1][1]
-
-    @forward_integration_factor.setter
-    def forward_integration_factor(self, value: int):
-        if value is None:
-            raise ValueError
-        control_sequence: ControlSequence = self.control_sequence
-        control_sequence[1] = 0
-        self._buffer.put_int(value=int(control_sequence), position=0)
-        self._buffer.put_int(value=value, position=1 * 4)
-
-    @property
-    def reverse_integration_factor(self) -> int:
-        return self[2][1]
-
-    @reverse_integration_factor.setter
-    def reverse_integration_factor(self, value: int):
-        if value is None:
-            raise ValueError
-        control_sequence: ControlSequence = self.control_sequence
-        control_sequence[2] = 0
-        self._buffer.put_int(value=int(control_sequence), position=0)
-        self._buffer.put_int(value=value, position=2 * 4)
-
-
 class EncodedRecord(ABC):
     def __init__(self, encoding_format: EncodingFormat = None, byte_order: ByteOrder = ByteOrder.BIG_ENDIAN):
         if encoding_format is None:
@@ -902,8 +735,6 @@ class SteimRecord(EncodedRecord):
         return self.shape[0]
 
     def frame(self, index: int):
-        start: int = index * 16
-        end: int = start + 16
         return self._frames[index]
 
     @property
@@ -962,11 +793,25 @@ class SteimRecord(EncodedRecord):
         return self._frames[item]
 
     @classmethod
+    def wrap_ints(cls, steim_ints: (bytes, bytearray), encoding_format: EncodingFormat = None,
+                  byte_order: ByteOrder = ByteOrder.BIG_ENDIAN) -> 'SteimRecord':
+        if steim_ints is None or len(steim_ints) == 0:
+            raise ValueError
+
+        instance = cls(IntArray.wrap_ints(steim_ints, byte_order=byte_order, rows=math.ceil(len(steim_ints) / 16),
+                                          columns=16), encoding_format=encoding_format,
+                       byte_order=byte_order)
+        instance._index = instance._capacity
+        return instance
+
+    @classmethod
     def wrap_bytes(cls, steim_bytes: (bytes, bytearray), encoding_format: EncodingFormat = None,
                    byte_order: ByteOrder = ByteOrder.BIG_ENDIAN) -> 'SteimRecord':
         if steim_bytes is None or len(steim_bytes) == 0:
             raise ValueError
-        instance = cls(IntArray.wrap_bytes(steim_bytes, byte_order), encoding_format=encoding_format,
+
+        instance = cls(IntArray.wrap_bytes(steim_bytes, rows=math.ceil(len(steim_bytes) / 16),
+                                           columns=16, byte_order=byte_order), encoding_format=encoding_format,
                        byte_order=byte_order)
         instance._index = instance._capacity
         return instance
@@ -975,139 +820,6 @@ class SteimRecord(EncodedRecord):
     def allocate(cls, number_of_frames: int, encoding_format: EncodingFormat,
                  byte_order: ByteOrder = ByteOrder.BIG_ENDIAN):
         return cls(IntArray.allocate(number_of_frames, 16, byte_order), encoding_format)
-
-
-class SteimRecord_1(EncodedRecord):
-
-    def __init__(self, number_of_frames: int = None, encoding_format: EncodingFormat = None,
-                 byte_order: ByteOrder = ByteOrder.BIG_ENDIAN):
-        super(SteimRecord, self).__init__(encoding_format=encoding_format, byte_order=byte_order)
-        if number_of_frames is None:
-            raise ValueError
-        self._number_of_frames = number_of_frames
-        self._frames = list()
-        # self._data = numpy.zeros((number_of_frames, 16), dtype='>i' if byte_order == ByteOrder.BIG_ENDIAN else '<i' )
-
-    @property
-    def forward_integration_factor(self) -> Optional[int]:
-        if self.is_empty():
-            return None
-        return self._frames[0].forward_integration_factor
-
-    @forward_integration_factor.setter
-    def forward_integration_factor(self, value: int) -> None:
-        if value is None:
-            raise ValueError
-        if self.is_empty():
-            self._frames.append(SteimHeader(byte_order=self._byte_order))
-        self._frames[0].forward_integration_factor = value
-
-    @property
-    def reverse_integration_factor(self) -> Optional[int]:
-        if self.is_empty():
-            return None
-        return self._frames[0].reverse_integration_factor
-
-    @reverse_integration_factor.setter
-    def reverse_integration_factor(self, value: int) -> None:
-        if value is None:
-            raise ValueError
-        if self.is_empty():
-            self._frames.append(SteimHeader(byte_order=self._byte_order))
-        self._frames[0].reverse_integration_factor = value
-
-    def append_frame(self, frame: SteimFrame):
-        if frame is None:
-            raise ValueError
-        if len(self._frames) >= self._number_of_frames:
-            raise IndexError
-        self._frames.append(frame)
-
-    def append(self, bucket: SteimBucket) -> bool:
-        if bucket is None:
-            raise ValueError
-
-        if len(self._frames) == 0:
-            self._frames.append(SteimHeader(encoding_format=self.encoding_format, byte_order=self.byte_order))
-
-        if self._frames[-1].is_full():
-            if len(self._frames) == self._number_of_frames:
-                return False
-            self._frames.append(SteimFrame(encoding_format=self.encoding_format, byte_order=self.byte_order))
-
-        last_sample: int = bucket[-1]
-        control, values, number_of_samples = bucket.pack()
-        self._frames[-1].append(control, values)
-        self._frames[0].reverse_integration_factor = last_sample
-        self._number_of_samples += number_of_samples
-        return True
-
-    def size(self) -> int:
-        if not self._frames:
-            return 0
-        return len(self._frames)
-
-    def is_full(self) -> bool:
-        return self.size() == self._number_of_frames and self._frames[-1].is_full()
-
-    def is_empty(self) -> bool:
-        return self.size() == 0
-
-    def to_byte_array(self) -> bytearray:
-        ba = bytearray()
-        for frame in self._frames:
-            ba.extend(frame.to_byte_array())
-        return ba
-
-    def __getitem__(self, item):
-        return self._frames[item]
-
-    def __setitem__(self, key, value):
-        if key is None or value is None:
-            raise ValueError
-        if key < 0 or key >= self._number_of_frames:
-            raise IndexError(key)
-        self._frames[key] = value
-
-    def __iter__(self):
-        return iter(self._frames)
-
-    def __len__(self):
-        return len(self._frames)
-
-    def __eq__(self, other):
-        if other is None or not isinstance(other, SteimRecord):
-            return False
-        if len(self) != len(other):
-            return False
-
-        for i in range(0, 16):
-            if self[i] != other[i]:
-                return False
-        return True
-
-    @classmethod
-    def wrap_bytes(cls, steim_bytes: (bytes, bytearray), encoding_format: EncodingFormat = None,
-                   byte_order: ByteOrder = ByteOrder.BIG_ENDIAN) -> 'SteimRecord':
-        if steim_bytes is None or len(steim_bytes) == 0:
-            raise ValueError
-        length: int = len(steim_bytes)
-        number_of_frames = math.ceil(length / (16 * 4))
-        instance = cls(encoding_format=encoding_format, number_of_frames=number_of_frames, byte_order=byte_order)
-
-        start: int = 0
-        end: int = 64
-        for idx in range(0, number_of_frames):
-            values = steim_bytes[start:min(end, length)]
-            if idx == 0:
-                instance.append_frame(SteimHeader.wrap_bytes(values=values, encoding_format=encoding_format,
-                                                             byte_order=byte_order))
-            else:
-                instance.append_frame(SteimFrame.wrap_bytes(values=values, encoding_format=encoding_format,
-                                                            byte_order=byte_order))
-            start = end
-            end += 64
-        return instance
 
 
 class Encoder(ABC):
@@ -1151,7 +863,7 @@ class SteimDecoder(Decoder, ABC):
     def __init__(self, encoding_format: EncodingFormat, byte_order: ByteOrder):
         super(SteimDecoder, self).__init__(encoding_format, byte_order)
 
-    def decode(self, data: bytes, **kwargs) -> array:
+    def decode(self, data, **kwargs) -> array:
         if data is None:
             raise ValueError
         record = SteimRecord.wrap_bytes(steim_bytes=data, encoding_format=self.encoding_format,
@@ -1164,7 +876,9 @@ class SteimDecoder(Decoder, ABC):
 
         exit_loop: bool = False
         cnt: int = 0
-        nums = list()
+        #nums = list()
+        nums = array.array('i')
+        x: int = 0
         for i in range(0, record.number_of_frames()):
             frame = record.frame(i)
             control_sequence = ControlSequence(frame[0])
@@ -1178,8 +892,9 @@ class SteimDecoder(Decoder, ABC):
                 if control == 0:
                     continue
                 value = frame[bucket_index]
-                #deltas = SteimBucket.unpack_by_control(encoding_format=record.encoding_format, control=control, value=value)
-                deltas = unpack(control=control, value=value)
+                deltas = SteimBucket.unpack_by_control(encoding_format=record.encoding_format, control=control,
+                                                       value=value)
+                # deltas = unpack(control=control, value=value)
                 if len(deltas) == 0:
                     raise SteimError('fill: {}, {} {}', control, value, deltas)
                 for delta in deltas:
@@ -1189,6 +904,7 @@ class SteimDecoder(Decoder, ABC):
                         if num != record.forward_integration_factor:
                             num = record.forward_integration_factor
                     nums.append(num)
+                    x += 1
                     previous = num
                 if expected_number_of_samples and len(nums) >= expected_number_of_samples:
                     exit_loop = True
@@ -1361,53 +1077,6 @@ def unpack_steim_2(value: int, mask: int, shift_from: int, width: int, expected_
     return nums
 
 
-def unpack_steim_2_use_num(value: int, mask: int, max_value: int, shift_from: int, left_shift: int, width: int,
-                           expected_list_size: int):
-    shift: int = shift_from
-    nums = list()
-    # max_value = 2 ** (width - 1)
-    append = nums.append
-    # nums = numpy.empty(dtype=int, shape=expected_list_size)
-    x = 0
-    for i in range(0, expected_list_size):
-        num = (value >> shift) & mask
-        if num == max_value:
-            num = -num
-        elif num > max_value:
-            num = num - left_shift  # (2**width)#(1 << width)
-        append(num)
-        x += 1
-        shift -= width
-    return nums
-
-
-def unpack_steim_2_n(value: int, mask: int, max_value: int, shift_from: int, left_shift: int, width: int,
-                     expected_list_size: int):
-    shift: int = shift_from
-    nums = list()
-    append = nums.append
-    for i in range(0, expected_list_size):
-        num = numpy.right_shift(value, shift) & mask
-        append(num)
-        shift -= width
-    return nums
-
-
-def unpack_steim_2_no(value: int, mask: int, max_value: int, shift_from: int, width: int, expected_list_size: int):
-    shift: int = shift_from
-    nums = list()
-    # max_value = 2 ** (width - 1)
-    for i in range(0, expected_list_size):
-        num = (value >> shift) & mask
-        if num == max_value:
-            num = -num
-        elif num > max_value:
-            num = num - (1 << width)
-        nums.append(num)
-        shift -= width
-    return nums
-
-
 lib = pathlib.Path().absolute() / "steim.so"
 steim = ctypes.CDLL('/Users/yazan/Documents/Github/python/seedPy/steim.so')
 
@@ -1416,49 +1085,49 @@ c_unpack.restype = _ctypes.c_void_p
 c_unpack.argtypes = [
     _ctypes.c_int,
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_unpack_1 = steim.unpack_1
 c_unpack_1.restype = _ctypes.c_void_p
 c_unpack_1.argtypes = [
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_unpack_2 = steim.unpack_2
 c_unpack_2.restype = _ctypes.c_void_p
 c_unpack_2.argtypes = [
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_unpack_3 = steim.unpack_3
 c_unpack_3.restype = _ctypes.c_void_p
 c_unpack_3.argtypes = [
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_unpack_4 = steim.unpack_4
 c_unpack_4.restype = _ctypes.c_void_p
 c_unpack_4.argtypes = [
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_unpack_5 = steim.unpack_5
 c_unpack_5.restype = _ctypes.c_void_p
 c_unpack_5.argtypes = [
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_unpack_6 = steim.unpack_6
 c_unpack_6.restype = _ctypes.c_void_p
 c_unpack_6.argtypes = [
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_unpack_7 = steim.unpack_7
 c_unpack_7.restype = _ctypes.c_void_p
 c_unpack_7.argtypes = [
     _ctypes.c_int,
-    ndpointer(dtype=numpy.int32)]
+    _ctypes.POINTER(_ctypes.c_int32)]
 
 c_get_control = steim.get_control
 c_get_control.restype = ctypes.c_int
@@ -1469,48 +1138,48 @@ def get_control(value: int):
 
 
 def unpack(control: int, value: int):
-    res = numpy.zeros(7, dtype=numpy.int32)
-    c_unpack(numpy.int(control), numpy.int(value), res)
+    res = (_ctypes.POINTER(_ctypes.c_int) * 7)
+    c_unpack(_ctypes.c_int32(control), _ctypes.c_int32(value), res)
     return res
 
 
 def unpack_1(value: int):
-    res = numpy.zeros(1, dtype=numpy.int32)
-    c_unpack_1(numpy.int(value), res)
+    res = (_ctypes.c_int32 * 1)()
+    c_unpack_1(_ctypes.c_int32(value), res)
     return res
 
 
 def unpack_2(value: int):
-    res = numpy.zeros(2, dtype=numpy.int32)
-    c_unpack_2(numpy.int(value), res)
+    res = (_ctypes.c_int32 * 2)()
+    c_unpack_2(_ctypes.c_int32(value), res)
     return res
 
 
 def unpack_3(value: int):
-    res = numpy.zeros(3, dtype=numpy.int32)
-    c_unpack_3(numpy.int(value), res)
+    res = (_ctypes.c_int32 * 3)()
+    c_unpack_3(_ctypes.c_int32(value), res)
     return res
 
 
 def unpack_4(value: int):
-    res = numpy.zeros(4, dtype=numpy.int32)
-    c_unpack_4(numpy.int(value), res)
+    res = (_ctypes.c_int32 * 4)()
+    c_unpack_4(_ctypes.c_int32(value), res)
     return res
 
 
 def unpack_5(value: int):
-    res = numpy.zeros(5, dtype=numpy.int32)
-    c_unpack_5(numpy.int(value), res)
+    res = (_ctypes.c_int32 * 5)()
+    c_unpack_5(_ctypes.c_int32(value), res)
     return res
 
 
 def unpack_6(value: int):
-    res = numpy.zeros(6, dtype=numpy.int32)
-    c_unpack_6(numpy.int(value), res)
+    res = (_ctypes.c_int32 * 6)()
+    c_unpack_6(_ctypes.c_int32(value), res)
     return res
 
 
 def unpack_7(value: int):
-    res = numpy.zeros(7, dtype=numpy.int32)
-    c_unpack_7(numpy.int(value), res)
+    res = (_ctypes.c_int32 * 7)()
+    c_unpack_7(_ctypes.c_int32(value), res)
     return res

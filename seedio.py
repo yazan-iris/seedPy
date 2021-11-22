@@ -4,9 +4,6 @@ from io import BufferedReader, BytesIO
 from pathlib import PosixPath
 from typing import Optional
 
-import numpy
-
-from buffer import ByteOrder
 from codec import SteimError, get_decoder
 from model import DecompressedRecord, DataRecord, DataHeader, BlocketteFactory, SeedFormatV2, SeedFormatV3, SeedFormat, \
     B1000
@@ -117,9 +114,9 @@ class Parser:
         if b1000 is None:
             raise SteimError(f'Record has no blockette of type 1000, b1000 is required.')
         if not self._header_only:
-            record.data = numpy.frombuffer(b_bytes[header.beginning_of_data: self._record_length],
-                                           dtype='>i' if header.byte_order == ByteOrder.BIG_ENDIAN else '<i')
-            # record.data = bytearray(b_bytes[header.beginning_of_data: self._record_length])
+            #record.data = numpy.frombuffer(b_bytes[header.beginning_of_data: self._record_length],
+             #                              dtype='>i' if header.byte_order == ByteOrder.BIG_ENDIAN else '<i')
+            record.data = b_bytes[header.beginning_of_data: self._record_length]
         return record
 
     def close(self):
