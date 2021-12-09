@@ -1,0 +1,13 @@
+name: seedpy
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - h5py
+  - matplotlib
+  - numpy
+  - pint
+  - pyarrow
+  - requests
+  - xarray
