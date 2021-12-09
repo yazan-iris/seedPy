@@ -1078,7 +1078,7 @@ def unpack_steim_2(value: int, mask: int, shift_from: int, width: int, expected_
 
 
 lib = pathlib.Path().absolute() / "steim.so"
-steim = ctypes.CDLL('/Users/yazan/Documents/Github/python/seedPy/steim.so')
+steim = ctypes.CDLL(lib)
 
 c_unpack = steim.unpack
 c_unpack.restype = _ctypes.c_void_p
