@@ -5,7 +5,7 @@ from io import StringIO
 import requests
 
 from fdsn import HttpClient
-from objectidentitier import ObjectIdentifier
+from objectidentifier import ObjectIdentifier
 
 
 class TestObjectIdentifier(unittest.TestCase):

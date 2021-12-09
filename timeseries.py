@@ -10,7 +10,7 @@ import numpy
 from pint import Unit
 
 from model import DecompressedRecord
-from objectidentitier import ObjectIdentifier
+from objectidentifier import ObjectIdentifier
 from units import ureg
 
 
